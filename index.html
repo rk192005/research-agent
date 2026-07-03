@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 Research Agent Dashboard</title>
+    <!-- Fonts matching portfolio -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Main Style Sheet -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Marked.js for parsing Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div id="app-container">
+        <!-- Header -->
+        <header class="glass-card">
+            <div class="logo">
+                <span class="bracket">&lt;</span>
+                <span class="logo-text">AUTOPILOT RESEARCH</span>
+                <span class="bracket">&gt;</span>
+            </div>
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <span class="stat-label">Queue:</span>
+                    <span id="stat-pending" class="stat-val">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Running:</span>
+                    <span id="stat-running" class="stat-val text-yellow">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Reports:</span>
+                    <span id="stat-completed" class="stat-val text-green">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Sidebar / Control Panel -->
+            <aside class="sidebar glass-card">
+                <!-- Add Topic Form -->
+                <div class="panel-section">
+                    <h3><i class="fa-solid fa-plus-circle text-pink"></i> Add Research Topic</h3>
+                    <form id="add-topic-form">
+                        <div class="form-group">
+                            <input type="text" id="topic-input" placeholder="e.g., Quantum Computing 2026" required autocomplete="off">
+                        </div>
+                        <div class="form-group row">
+                            <select id="depth-select">
+                                <option value="deep">Deep Search</option>
+                                <option value="quick">Quick Search</option>
+                            </select>
+                            <button type="submit" class="btn-primary">Add</button>
+                        </div>
+                    </form>
+                    <div id="csv-export-message" class="info-alert hidden">
+                        <span class="close-btn" onclick="this.parentElement.classList.add('hidden')">&times;</span>
+                        <p><strong>Copy to CSV queue:</strong></p>
+                        <code id="csv-line-code"></code>
+                    </div>
+                </div>
+
+                <!-- Queue Filter/Search -->
+                <div class="panel-section">
+                    <div class="search-bar">
+                        <i class="fa-solid fa-search"></i>
+                        <input type="text" id="search-input" placeholder="Filter research topics...">
+                    </div>
+                </div>
+
+                <!-- Queue List -->
+                <div class="queue-container">
+                    <h3><i class="fa-solid fa-list-ul text-accent"></i> Queue Status</h3>
+                    <div id="queue-list" class="queue-list">
+                        <!-- Queue Items populated dynamically -->
+                        <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading queue...</div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Content Area / Report Viewer -->
+            <main class="content-area glass-card">
+                <!-- Empty State -->
+                <div id="empty-state" class="center-content">
+                    <div class="logo-badge">🤖</div>
+                    <h2>Autopilot Research Agent</h2>
+                    <p>Select a completed research report from the sidebar to read it, or add a new topic to the queue.</p>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loading-state" class="center-content hidden">
+                    <div class="spinner"><i class="fa-solid fa-circle-notch fa-spin fa-3x text-pink"></i></div>
+                    <p>Fetching and rendering report...</p>
+                </div>
+
+                <!-- Report Container -->
+                <article id="report-viewer" class="report-content hidden">
+                    <div class="report-header">
+                        <h1 id="report-title">Report Title</h1>
+                        <div class="report-meta">
+                            <span><i class="fa-solid fa-calendar"></i> <span id="report-date">N/A</span></span>
+                            <span><i class="fa-solid fa-tags"></i> <span id="report-depth">N/A</span></span>
+                            <a id="report-raw-link" href="#" target="_blank" class="btn-secondary"><i class="fa-solid fa-file-code"></i> View Raw</a>
+                        </div>
+                    </div>
+                    <hr class="glow-hr">
+                    <!-- Parsed Markdown Container -->
+                    <div id="markdown-body" class="markdown-body">
+                        <!-- Markdown text rendered here -->
+                    </div>
+                </article>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Script -->
+    <script src="script.js"></script>
+</body>
+</html>

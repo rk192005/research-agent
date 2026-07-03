@@ -30,20 +30,34 @@ def search_web(topic: str, depth: str = "deep") -> str:
     max_results = 15 if depth == "deep" else 7
 
     print(f"   Searching: {topic}")
+    text_results = []
+    news_results = []
+    
     with DDGS() as ddgs:
         # Text search
-        text_results = list(ddgs.text(topic, max_results=max_results))
+        try:
+            text_results = list(ddgs.text(topic, max_results=max_results))
+        except Exception as e:
+            print(f"   ⚠️ Text search encountered an issue: {e}")
+            import traceback; traceback.print_exc()
+
         # News search for recent coverage
-        news_results = list(ddgs.news(topic, max_results=5))
+        try:
+            news_results = list(ddgs.news(topic, max_results=5))
+        except Exception as e:
+            print(f"   ⚠️ News search encountered an issue (skipping news): {e}")
 
     # Format results into structured context
     findings = f"## Web Search Results for: {topic}\n\n"
 
-    findings += "### Top Results\n"
-    for i, r in enumerate(text_results, 1):
-        findings += f"\n**{i}. {r.get('title', 'No title')}**\n"
-        findings += f"   URL: {r.get('href', 'N/A')}\n"
-        findings += f"   {r.get('body', 'No snippet')}\n"
+    if text_results:
+        findings += "### Top Results\n"
+        for i, r in enumerate(text_results, 1):
+            findings += f"\n**{i}. {r.get('title', 'No title')}**\n"
+            findings += f"   URL: {r.get('href', 'N/A')}\n"
+            findings += f"   {r.get('body', 'No snippet')}\n"
+    else:
+        findings += "*(No general search results retrieved)*\n"
 
     if news_results:
         findings += "\n### Recent News\n"
@@ -52,6 +66,9 @@ def search_web(topic: str, depth: str = "deep") -> str:
             findings += f"   Source: {r.get('source', 'N/A')} | Date: {r.get('date', 'N/A')}\n"
             findings += f"   URL: {r.get('url', 'N/A')}\n"
             findings += f"   {r.get('body', 'No snippet')}\n"
+
+    if not text_results and not news_results:
+        raise RuntimeError("Both text and news searches failed due to rate limits or network issues.")
 
     return findings
 
@@ -127,6 +144,53 @@ def save_report(topic: str, raw_findings: str, final_report: str) -> Path:
     return filepath
 
 
+def run_gemini_grounded_research(topic: str, depth: str = "deep") -> tuple[str, str]:
+    """Fallback Agent: Uses Gemini 2.5 Flash native Google Search grounding."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+    system_prompt = """You are a senior research analyst who produces executive-grade research reports.
+You search the web and transform findings into a polished, structured report.
+
+Rules:
+1. Lead with an executive summary (3-4 sentences max)
+2. Organize findings by theme, not by source
+3. Include a "So What?" section explaining practical implications
+4. End with concrete next steps or recommendations
+5. Use markdown formatting throughout
+6. Be concise — every sentence must earn its place"""
+
+    print("🧠 Fallback Agent: Gemini 2.5 Flash with Google Search grounding...")
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=f"Create a complete research report on: {topic}",
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+            temperature=0.3,
+            max_output_tokens=8000,
+        ),
+    )
+
+    # Extract grounding metadata to construct raw findings
+    metadata = response.candidates[0].grounding_metadata
+    findings_list = []
+    if metadata:
+        if metadata.web_search_queries:
+            findings_list.append(f"Web Search Queries: {', '.join(metadata.web_search_queries)}\n")
+        
+        if metadata.grounding_chunks:
+            findings_list.append("### Grounded Sources")
+            for chunk in metadata.grounding_chunks:
+                if chunk.web:
+                    findings_list.append(f"- [{chunk.web.title}]({chunk.web.uri})")
+    
+    raw_findings = "\n".join(findings_list) if findings_list else "Grounded directly by Gemini via Google Search."
+    return raw_findings, response.text
+
+
 def run(topic: str, depth: str = "deep"):
     """Run the full 3-agent research pipeline — completely free."""
     print(f"\n{'='*60}")
@@ -136,29 +200,30 @@ def run(topic: str, depth: str = "deep"):
     print(f"💰 Cost: $0.00")
     print(f"{'='*60}\n")
 
+    raw_findings = ""
+    final_report = ""
+
     # --- Agent 1: DuckDuckGo ---
     print("🔍 Agent 1/3: DuckDuckGo — searching the web (free, no API key)...")
     try:
         raw_findings = search_web(topic, depth)
         result_count = raw_findings.count("**")
         print(f"   ✅ Got {len(raw_findings):,} chars across ~{result_count // 2} results\n")
-    except Exception as e:
-        print(f"   ❌ Search failed: {e}")
-        sys.exit(1)
-
-    # --- Agent 2: Gemini ---
-    print("🧠 Agent 2/3: Gemini 2.5 Flash — synthesizing report (free tier)...")
-    try:
+        
+        # --- Agent 2: Gemini Synthesis ---
+        print("🧠 Agent 2/3: Gemini 2.5 Flash — synthesizing report (free tier)...")
         final_report = synthesize_report(topic, raw_findings)
         print(f"   ✅ Generated {len(final_report):,} char report\n")
+
     except Exception as e:
-        # Save raw findings even if Gemini fails
-        emergency = REPORTS_DIR / f"PARTIAL_{datetime.now():%Y%m%d_%H%M}.md"
-        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-        emergency.write_text(raw_findings)
-        print(f"   ❌ Gemini failed: {e}")
-        print(f"   💾 Raw search results saved to: {emergency}")
-        sys.exit(1)
+        print(f"   ⚠️ DDG Search/Synthesis failed or rate-limited: {e}")
+        print("   ⚡ Switching to Gemini Native Search Grounding fallback...")
+        try:
+            raw_findings, final_report = run_gemini_grounded_research(topic, depth)
+            print(f"   ✅ Fallback succeeded. Generated {len(final_report):,} char report\n")
+        except Exception as fallback_err:
+            print(f"   ❌ Fallback also failed: {fallback_err}")
+            sys.exit(1)
 
     # --- Agent 3: Save ---
     print("📄 Agent 3/3: Saving report...")
