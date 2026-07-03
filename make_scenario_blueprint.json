@@ -1,0 +1,200 @@
+{
+  "name": "Research Agent — Autopilot",
+  "flow": [
+    {
+      "id": 1,
+      "module": "google-sheets:filterRows",
+      "version": 2,
+      "parameters": {
+        "__IMTCONN__": null
+      },
+      "mapper": {
+        "from": "drive",
+        "spreadsheetId": "PASTE_YOUR_SPREADSHEET_ID",
+        "sheetId": "Sheet1",
+        "includesHeaders": "Yes",
+        "tableFirstRow": "A1:G1",
+        "filter": {
+          "conditions": [
+            {
+              "a": "{{C}}",
+              "b": "pending",
+              "o": "text:equal"
+            }
+          ]
+        },
+        "sortOrder": "asc",
+        "sortBy": "F",
+        "limit": 3
+      },
+      "metadata": {
+        "designer": { "x": 0, "y": 0 },
+        "restore": {},
+        "expect": []
+      }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:updateRow",
+      "version": 2,
+      "parameters": {
+        "__IMTCONN__": null
+      },
+      "mapper": {
+        "from": "drive",
+        "spreadsheetId": "PASTE_YOUR_SPREADSHEET_ID",
+        "sheetId": "Sheet1",
+        "includesHeaders": "Yes",
+        "rowNumber": "{{1.`__ROW_NUMBER__`}}",
+        "values": {
+          "C": "running"
+        }
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 }
+      }
+    },
+    {
+      "id": 3,
+      "module": "perplexity:createChatCompletion",
+      "version": 1,
+      "parameters": {
+        "__IMTCONN__": null
+      },
+      "mapper": {
+        "model": "sonar-pro",
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are a research analyst. Investigate the following topic thoroughly and return structured findings.\n\nTOPIC: {{1.A}}\n\nDEPTH: {{1.B}}\n\nReturn your response in this exact format:\n\n## Key Findings\n- [Finding 1 with specific data points]\n- [Finding 2 with specific data points]\n- [Continue for all major findings]\n\n## Current State of the Art\n[2-3 paragraphs on where things stand right now]\n\n## Notable Players & Projects\n- [Company/Project]: [What they're doing]\n\n## Data Points & Statistics\n- [Specific numbers, dates, market sizes]\n\n## Sources\n- [URL 1]: [What this source covers]\n- [URL 2]: [What this source covers]\n\nBe specific. Include numbers, dates, and names. No filler."
+          }
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4000
+      },
+      "metadata": {
+        "designer": { "x": 600, "y": 0 }
+      }
+    },
+    {
+      "id": 4,
+      "module": "google-sheets:updateRow",
+      "version": 2,
+      "parameters": {
+        "__IMTCONN__": null
+      },
+      "mapper": {
+        "from": "drive",
+        "spreadsheetId": "PASTE_YOUR_SPREADSHEET_ID",
+        "sheetId": "Sheet1",
+        "includesHeaders": "Yes",
+        "rowNumber": "{{1.`__ROW_NUMBER__`}}",
+        "values": {
+          "D": "{{3.choices[].message.content}}"
+        }
+      },
+      "metadata": {
+        "designer": { "x": 900, "y": 0 },
+        "note": "Insurance save — if Claude fails, Perplexity findings are preserved"
+      }
+    },
+    {
+      "id": 5,
+      "module": "anthropic-claude:createPrompt",
+      "version": 1,
+      "parameters": {
+        "__IMTCONN__": null
+      },
+      "mapper": {
+        "model": "claude-sonnet-4-20250514",
+        "system": "You are a senior research analyst who produces executive-grade research reports. You receive raw research findings and transform them into a polished, structured report.\n\nRules:\n1. Lead with an executive summary (3-4 sentences max)\n2. Organize findings by theme, not by source\n3. Include a \"So What?\" section explaining practical implications\n4. End with concrete next steps or recommendations\n5. Preserve all source URLs in a References section\n6. Use markdown formatting throughout\n7. Be concise — every sentence must earn its place",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Create a research report on: {{1.A}}\n\nHere are the raw findings from web research:\n\n{{3.choices[].message.content}}\n\nProduce a complete report following your formatting rules."
+          }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4000
+      },
+      "metadata": {
+        "designer": { "x": 1200, "y": 0 }
+      }
+    },
+    {
+      "id": 6,
+      "module": "google-docs:createDocument",
+      "version": 1,
+      "parameters": {
+        "__IMTCONN__": null
+      },
+      "mapper": {
+        "name": "Research: {{1.A}} — {{formatDate(now; \"YYYY-MM-DD\")}}",
+        "content": "{{5.content[].text}}",
+        "folderId": "PASTE_YOUR_FOLDER_ID"
+      },
+      "metadata": {
+        "designer": { "x": 1500, "y": 0 }
+      }
+    },
+    {
+      "id": 7,
+      "module": "google-sheets:updateRow",
+      "version": 2,
+      "parameters": {
+        "__IMTCONN__": null
+      },
+      "mapper": {
+        "from": "drive",
+        "spreadsheetId": "PASTE_YOUR_SPREADSHEET_ID",
+        "sheetId": "Sheet1",
+        "includesHeaders": "Yes",
+        "rowNumber": "{{1.`__ROW_NUMBER__`}}",
+        "values": {
+          "C": "done",
+          "E": "{{6.alternateLink}}",
+          "G": "{{formatDate(now; \"YYYY-MM-DD HH:mm\")}}"
+        }
+      },
+      "metadata": {
+        "designer": { "x": 1800, "y": 0 }
+      }
+    },
+    {
+      "id": 8,
+      "module": "gmail:sendAnEmail",
+      "version": 1,
+      "parameters": {
+        "__IMTCONN__": null
+      },
+      "mapper": {
+        "to": "PASTE_YOUR_EMAIL",
+        "subject": "✅ Research Complete: {{1.A}}",
+        "body": "Your research report is ready.\n\nTopic: {{1.A}}\nReport: {{6.alternateLink}}\n\n— Your Research Agent"
+      },
+      "metadata": {
+        "designer": { "x": 2100, "y": 0 },
+        "note": "Optional — remove this module if you don't want email notifications"
+      }
+    }
+  ],
+  "metadata": {
+    "instant": false,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    }
+  },
+  "scheduling": {
+    "type": "interval",
+    "interval": 900
+  }
+}
